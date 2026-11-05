@@ -1,0 +1,7 @@
+out/
+build/
+*.o
+*.obj
+*.exe
+.vs/
+__pycache__/
