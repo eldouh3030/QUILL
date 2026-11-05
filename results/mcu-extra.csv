@@ -1,0 +1,5 @@
+function,payload_bytes,sig,n,m,k,reps,instructions,cycles,ms_at_64MHz,ms_at_120MHz,stack_bytes,heap_bytes,cycles_sd,cycles_min,cycles_max
+op_parity,0,0,32,13,22,3,65887,118722,1.8550,0.9893,896,0,0,118722,118722
+op_disperse,0,3,32,13,22,2,689074,1318251,20.5977,10.9854,2208,0,0,1318251,1318251
+op_parity,0,0,64,20,49,3,201169,363213,5.6752,3.0268,896,0,0,363213,363213
+op_disperse,0,3,64,20,49,2,1057039,2012657,31.4478,16.7721,2208,0,0,2012657,2012657

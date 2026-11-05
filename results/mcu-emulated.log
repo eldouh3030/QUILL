@@ -1,0 +1,45 @@
+setup ok
+op_sha256              sig0 n32   cyc          6771       0.106 ms@64MHz  stack    528 heap      0
+op_hkdf                sig0 n32   cyc         31490       0.492 ms@64MHz  stack   1520 heap      0
+op_gcm                 sig0 n32   cyc         14931       0.233 ms@64MHz  stack   1216 heap      0
+op_gcm                 sig0 n32   cyc         28326       0.443 ms@64MHz  stack   1216 heap      0
+op_leaf                sig0 n32   cyc          7434       0.116 ms@64MHz  stack    656 heap      0
+op_merkle              sig0 n32   cyc        231003       3.609 ms@64MHz  stack   1360 heap      0
+op_parity              sig0 n32   cyc         75376       1.178 ms@64MHz  stack    896 heap      0
+op_disperse            sig0 n32   cyc        171716       2.683 ms@64MHz  stack   2208 heap      0
+op_hybrid512           sig0 n32   cyc       4262025      66.594 ms@64MHz  stack   6504 heap   8192
+op_hybrid768           sig0 n32   cyc       4671047      72.985 ms@64MHz  stack   6504 heap  16384
+op_sign_ed25519        sig5 n32   cyc        847838      13.247 ms@64MHz  stack   1672 heap      0
+op_sign_mldsa44        sig0 n32   cyc      11593062     181.142 ms@64MHz  stack   2592 heap  16384
+op_sign_mldsa44ref     sig6 n32   cyc       7974745     124.605 ms@64MHz  stack  51884 heap    256
+op_sign_lms            sig4 n32   cyc       7634863     119.295 ms@64MHz  stack   1848 heap      0
+op_sign_falcon512      sig1 n32   cyc      51465708     804.152 ms@64MHz  stack  43480 heap    256
+op_sign_sphincs128f    sig3 n32   cyc     404366610    6318.228 ms@64MHz  stack   2432 heap    128
+op_sign_sphincs128s    sig2 n32   cyc    8400484540  131257.571 ms@64MHz  stack   2520 heap    128
+prep_verify              prepared
+op_verify_ed25519      sig5 n32   cyc       2271515      35.492 ms@64MHz  stack  11448 heap      0
+op_verify_mldsa44      sig0 n32   cyc       2283287      35.676 ms@64MHz  stack   8848 heap  16384
+op_verify_falcon512    sig1 n32   cyc        941611      14.713 ms@64MHz  stack  12732 heap    256
+op_verify_lms          sig4 n32   cyc       3489222      54.519 ms@64MHz  stack   9224 heap      0
+op_verify_sphincs128s  sig2 n32   cyc       7886237     123.222 ms@64MHz  stack   9960 heap    128
+prep_session             prepared
+op_packet              sig0 n32   cyc         42381       0.662 ms@64MHz  stack   1552 heap      0
+op_packet              sig0 n32   cyc         58886       0.920 ms@64MHz  stack   1552 heap      0
+op_session             sig0 n32   cyc      15869628     247.963 ms@64MHz  stack  11048 heap  28672
+op_batch               sig0 n32   cyc      16127431     251.991 ms@64MHz  stack   4032 heap  16384
+prep_session             prepared
+op_batch               sig0 n8    cyc      14357972     224.343 ms@64MHz  stack   4032 heap  16384
+prep_session             prepared
+op_batch               sig0 n16   cyc      12522548     195.665 ms@64MHz  stack   4032 heap  16384
+prep_session             prepared
+op_batch               sig0 n64   cyc      14793020     231.141 ms@64MHz  stack   4032 heap  16384
+prep_session             prepared
+op_batch               sig1 n32   cyc      53385310     834.145 ms@64MHz  stack  44920 heap    256
+prep_session             prepared
+op_batch               sig4 n32   cyc       7438251     116.223 ms@64MHz  stack   3648 heap      0
+prep_session             prepared
+op_batch               sig5 n32   cyc       2670739      41.730 ms@64MHz  stack   3648 heap      0
+prep_session             prepared
+op_batch               sig3 n32   cyc     408396737    6381.199 ms@64MHz  stack   3872 heap    128
+prep_session             prepared
+op_batch               sig2 n32   cyc    8403295307  131301.489 ms@64MHz  stack   3960 heap    128

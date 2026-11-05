@@ -1,0 +1,5 @@
+cpu=AMD Ryzen 5 4500U (6 cores, 2.38 GHz), 7.4 GB RAM
+os=Windows 11, Visual Studio 2022 17.14, CMake preset "release" (Ninja, MSVC 19.44, /O2), on mains power, power mode Best performance
+libraries=wolfSSL 5.7.6-stable (wolfCrypt, portable C, user_settings.h), PQClean commit 0586a824 (clean implementations)
+command=hostbench.exe 300 2  (at most 300 repetitions or 2 s per operation)
+tests=tests.exe: 862 checks passed, 0 failed

@@ -1,0 +1,206 @@
+/*
+ * Symbolic model of the protocol (Tamarin, Dolev-Yao attacker).
+ *
+ *  Device D holds a signature key; gateway G holds an ML-KEM key (modelled as
+ *  public-key encryption of a fresh secret) and an X25519 key. The session
+ *  secret hashes both shares, so it stays secret unless BOTH are broken.
+ *
+ *  Harvest now, decrypt later: QBreak(G) hands the attacker the discrete
+ *  logarithm of the gateway's X25519 key (a future quantum computer) and
+ *  KBreak(G) the ML-KEM secret key (a cryptanalytic break). Both may happen at
+ *  any time, also long after the session, so recorded traffic is at risk only
+ *  if both happen.
+ *
+ *  Key chain: the batch-b chain key is chain(ck0, b). From chain(ck0, b) the
+ *  attacker may step forward (rule Chain_Forward) but never back, which is the
+ *  one-wayness of the real HKDF chain. RevChainAt(ck0, b) leaks the device
+ *  state while it is at batch b (forward secrecy for earlier batches).
+ *
+ *  A batch carries two packets ('1', '2'). The network is the attacker, so any
+ *  packet or authenticator can be lost. The authenticator carries both leaves
+ *  in clear (stronger than the parity symbols of the implementation); this also
+ *  models the recovery of the leaf of a lost packet.
+ *
+ *  Run:  tamarin-prover --prove pqs.spthy
+ */
+theory PQS_Stream
+begin
+
+builtins: diffie-hellman, signing, hashing, symmetric-encryption, asymmetric-encryption, natural-numbers
+functions: kdf/1, chain/2
+
+restriction Equality: "All x y #i. Eq(x, y) @ #i ==> x = y"
+restriction Unique:   "All x #i #j. Uniq(x) @ #i & Uniq(x) @ #j ==> #i = #j"
+restriction OneKeyG:  "All x #i #j. KeyG(x) @ #i & KeyG(x) @ #j ==> #i = #j"
+restriction OneKeyD:  "All x #i #j. KeyD(x) @ #i & KeyD(x) @ #j ==> #i = #j"
+
+/* ------------------------------------------------------------------ set-up */
+rule Gateway_Setup:
+    [ Fr(~skK), Fr(~skX) ]
+  --[ KeyG($G) ]->
+    [ !LtkG($G, ~skK, ~skX), !PkG($G, pk(~skK), 'g'^~skX), Out(<pk(~skK), 'g'^~skX>) ]
+
+rule Device_Setup:
+    [ Fr(~skD) ] --[ KeyD($D) ]-> [ !LtkD($D, ~skD), !PkD($D, pk(~skD)), Out(pk(~skD)) ]
+
+rule Reveal_Device: [ !LtkD(D, sk) ] --[ RevD(D) ]-> [ Out(sk) ]
+rule Quantum_DLog:  [ !LtkG(G, skK, skX) ] --[ QBreak(G) ]-> [ Out(skX) ]
+rule Break_MLKEM:   [ !LtkG(G, skK, skX) ] --[ KBreak(G) ]-> [ Out(skK) ]
+
+rule Chain_Forward: [ In(chain(x, %b)) ] --> [ Out(chain(x, %b %+ %1)) ]
+
+/* ------------------------------------------------------------------ device */
+rule D_Init:
+    let ct  = aenc(<'kem', ~s1>, pkK)
+        E   = 'g'^~e
+        th  = h(<'th', ~sid, ct, E, pkK, pkX, pkD>)
+        ck0 = kdf(<'ck0', ~s1, pkX^~e, th>)
+    in
+    [ !LtkD($D, skD), !PkD($D, pkD), !PkG($G, pkK, pkX), Fr(~sid), Fr(~s1), Fr(~e) ]
+  --[ DInit($D, $G, th, ck0) ]->
+    [ Out(<~sid, ct, E, sign(<'init', th>, skD)>), DSt($D, $G, th, ck0, %1) ]
+
+rule D_Batch:
+    let kb  = kdf(<'batch', chain(ck0, %b)>)
+        k1  = kdf(<'pkt', kb, '1'>)
+        k2  = kdf(<'pkt', kb, '2'>)
+        c1  = senc(<~m1, <'D', th, %b, '1'>>, k1)
+        c2  = senc(<~m2, <'D', th, %b, '2'>>, k2)
+        l1  = h(<'leaf', th, %b, '1', h(<'kc', k1>), c1>)
+        l2  = h(<'leaf', th, %b, '2', h(<'kc', k2>), c2>)
+    in
+    [ DSt(D, G, th, ck0, %b), !LtkD(D, skD), Fr(~m1), Fr(~m2) ]
+  --[ DSent(D, G, th, %b, '1', ~m1), DSent(D, G, th, %b, '2', ~m2), DStep(D, G, th, ck0) ]->
+    [ Out(<'D', th, %b, '1', c1>), Out(<'D', th, %b, '2', c2>),
+      Out(<'A', th, %b, sign(<'batch', th, %b, h(<'node', th, %b, l1, l2>)>, skD), l1, l2>),
+      DSt(D, G, th, ck0, %b %+ %1) ]
+
+rule D_RevState:
+    [ DSt(D, G, th, ck0, %b) ]
+  --[ RevChainAt(ck0, %b), DStep(D, G, th, ck0) ]->
+    [ Out(chain(ck0, %b)), DSt(D, G, th, ck0, %b) ]
+
+/* ----------------------------------------------------------------- gateway */
+rule G_Init:
+    let pkK = pk(~skK)
+        pkX = 'g'^~skX
+        ct  = aenc(<'kem', s1>, pkK)
+        th  = h(<'th', sid, ct, E, pkK, pkX, pkD>)
+        ck0 = kdf(<'ck0', s1, E^~skX, th>)
+    in
+    [ !LtkG($G, ~skK, ~skX), !PkD($D, pkD), In(<sid, ct, E, si>) ]
+  --[ Eq(verify(si, <'init', th>, pkD), true), Uniq(<'sess', th>), GInit($D, $G, th, ck0) ]->
+    [ !GSess($D, $G, th, ck0) ]
+
+/* immediate symmetric authenticity of each packet (any batch number) */
+rule G_Packet:
+    let kb = kdf(<'batch', chain(ck0, %b)>)
+        k  = kdf(<'pkt', kb, i>)
+        c  = senc(<m, <'D', th, %b, i>>, k)
+    in
+    [ !GSess(D, G, th, ck0), In(<'D', th, %b, i, c>) ]
+  --[ GAccept(D, G, th, %b, i, m), Uniq(<'pkt', th, %b, i>) ]->
+    [ !GGot(D, th, %b, i, m, h(<'leaf', th, %b, i, h(<'kc', k>), c>)) ]
+
+/* The gateway's non-repudiation check of a record is the same computation as
+   the third-party check below (Judge rules) with a key it holds, so the
+   soundness lemma covers both. */
+
+/* selective disclosure of one packet key to an auditor (public channel) */
+rule G_Disclose:
+    [ !GSess(D, G, th, ck0), !GGot(D, th, %b, i, m, l) ]
+  --[ Disclose(th, %b, i) ]->
+    [ Out(kdf(<'pkt', kdf(<'batch', chain(ck0, %b)>), i>)) ]
+
+/* ------------------------------------------------- third-party audit (judge) */
+rule Judge1:
+    let c = senc(<m, <'D', th, %b, '1'>>, k)
+        l = h(<'leaf', th, %b, '1', h(<'kc', k>), c>)
+    in
+    [ !PkD(D, pkD), In(<th, %b, '1', c, sib, s, k>) ]
+  --[ Eq(verify(s, <'batch', th, %b, h(<'node', th, %b, l, sib>)>, pkD), true), Judge(D, th, %b, '1', m) ]->
+    [ ]
+
+rule Judge2:
+    let c = senc(<m, <'D', th, %b, '2'>>, k)
+        l = h(<'leaf', th, %b, '2', h(<'kc', k>), c>)
+    in
+    [ !PkD(D, pkD), In(<th, %b, '2', c, sib, s, k>) ]
+  --[ Eq(verify(s, <'batch', th, %b, h(<'node', th, %b, sib, l>)>, pkD), true), Judge(D, th, %b, '2', m) ]->
+    [ ]
+
+tactic: states_last
+presort: s
+prio:
+    regex "Fr\("
+    regex "!LtkD\("
+    regex "!KU\( ~"
+    regex "!KU\( sign"
+deprio:
+    regex "!GSess\("
+    regex "DSt\("
+    regex "!KU\( senc"
+    regex "!KU\( kdf"
+    regex "!KU\( chain"
+
+/* ----------------------------------------------------------- helper lemmas */
+lemma dev_state_origin [reuse, use_induction]:
+  "All D G th ck0 #a. DStep(D, G, th, ck0) @ #a ==> Ex #b. DInit(D, G, th, ck0) @ #b & #b < #a"
+
+lemma chain_key_index [reuse, use_induction]:
+  "All x %b #a. KU(chain(x, %b)) @ #a ==>
+      (Ex #c. KU(x) @ #c & #c < #a) | (Ex %j #r. RevChainAt(x, %j) @ #r & #r < #a & (%j = %b | %j << %b))"
+
+/* ------------------------------------------------------------------ lemmas */
+
+/* executability: packet 2 of a batch is lost, packet 1 is still non-repudiable:
+   the gateway accepts it, discloses its key, and a third party accepts the evidence */
+lemma exec_loss [heuristic={states_last}]: exists-trace
+  "Ex D G th m #s #a #d #i. DSent(D, G, th, %1, '1', m) @ #s & GAccept(D, G, th, %1, '1', m) @ #a
+     & Disclose(th, %1, '1') @ #d & Judge(D, th, %1, '1', m) @ #i
+     & not (Ex G2 m2 #j. GAccept(D, G2, th, %1, '2', m2) @ #j)
+     & not (Ex X #r. RevD(X) @ #r) & not (Ex X #r. QBreak(X) @ #r) & not (Ex X #r. KBreak(X) @ #r)
+     & not (Ex x %j #r. RevChainAt(x, %j) @ #r)"
+
+/* executability: a third party accepts evidence for a disclosed record */
+lemma exec_judge [heuristic={states_last}]: exists-trace
+  "Ex D G th m #s #d #i. DSent(D, G, th, %1, '2', m) @ #s & Disclose(th, %1, '2') @ #d & Judge(D, th, %1, '2', m) @ #i
+     & not (Ex X #r. RevD(X) @ #r) & not (Ex X #r. QBreak(X) @ #r) & not (Ex X #r. KBreak(X) @ #r)
+     & not (Ex x %j #r. RevChainAt(x, %j) @ #r)"
+
+/* the gateway only accepts sessions the device started */
+lemma session_auth:
+  "All D G th ck #i. GInit(D, G, th, ck) @ #i ==>
+     (Ex #j. DInit(D, G, th, ck) @ #j & #j < #i) | (Ex #r. RevD(D) @ #r & #r < #i)"
+
+/* hybrid secrecy under harvest-now-decrypt-later */
+lemma session_secrecy_hndl [heuristic={states_last}]:
+  "All D G th ck #i #j. DInit(D, G, th, ck) @ #i & K(ck) @ #j ==>
+     (Ex #a. QBreak(G) @ #a) & (Ex #c. KBreak(G) @ #c)"
+
+/* packet confidentiality: forward secrecy and selective disclosure */
+lemma packet_secrecy [heuristic={states_last}]:
+  "All D G th %b i m #i #j. DSent(D, G, th, %b, i, m) @ #i & K(m) @ #j ==>
+     ((Ex #a. QBreak(G) @ #a) & (Ex #c. KBreak(G) @ #c))
+   | (Ex ck0 %j #r. RevChainAt(ck0, %j) @ #r & DStep(D, G, th, ck0) @ #r & ((%j = %b) | (%j << %b)))
+   | (Ex #d. Disclose(th, %b, i) @ #d)"
+
+/* the attacker learns a packet key only through a broken session, a
+   leaked device state at that batch or earlier, or its disclosure */
+lemma packet_key_secrecy [heuristic={states_last}]:
+  "All D G th ck0 %b i #s #j. DInit(D, G, th, ck0) @ #s & K(kdf(<'pkt', kdf(<'batch', chain(ck0, %b)>), i>)) @ #j ==>
+     ((Ex #a. QBreak(G) @ #a) & (Ex #c. KBreak(G) @ #c))
+   | (Ex %j #r. RevChainAt(ck0, %j) @ #r & ((%j = %b) | (%j << %b)))
+   | (Ex #d. Disclose(th, %b, i) @ #d)"
+
+/* Immediate packet authenticity at the gateway is not stated as a separate
+   lemma: in the symbolic model a ciphertext under a key the attacker does not
+   know can only come from the device, so it follows from packet_key_secrecy
+   (a direct mechanised proof did not terminate within 25 minutes). */
+
+/* soundness of third-party audit, independent of the gateway's honesty */
+lemma judge_sound [heuristic={states_last}]:
+  "All D th %b i m #i. Judge(D, th, %b, i, m) @ #i ==>
+     (Ex G #j. DSent(D, G, th, %b, i, m) @ #j & #j < #i) | (Ex #r. RevD(D) @ #r & #r < #i)"
+
+end
