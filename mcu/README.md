@@ -35,5 +35,6 @@ Plan lines are `<function> <payload> <reps> <sig> <n> <m> <k>`; `reps = 0` runs 
 step without measuring. Signature ids: 0 ML-DSA-44, 1 Falcon-512, 2 SPHINCS+-128s,
 3 SPHINCS+-128f, 4 LMS/HSS, 5 Ed25519, 6 ML-DSA-44 (PQClean).
 
-`results/mcu-all.csv` merges the four files (protocol rows from the final code replace the
-earlier ones) and is what `src/stream.c` reads.
+`python3 tools/merge-mcu.py` (from the repository root) merges the five files into
+`results/mcu-all.csv`; rows of `mcu-protocol.csv`, measured with the final 14-byte DATA header,
+replace earlier rows of the same function. `src/stream.c` reads this file.

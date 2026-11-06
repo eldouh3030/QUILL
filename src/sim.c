@@ -269,6 +269,112 @@ static void compare_all(int payload) {
     }
 }
 
+
+/* ---------------------------------------------------------------- adaptive */
+/* A channel that switches between a calm and a noisy regime (posture or
+   movement changes), and three policies for (m, k): fixed for the calm
+   regime, fixed for the noisy regime, and adaptive. In the adaptive policy the
+   gateway reports after every batch how many of its frames were lost and the
+   mean burst length; the device keeps moving averages and, before closing a
+   batch, picks (m, k) from a table computed with the exact model. */
+#ifndef ADAPT_TARGET
+#define ADAPT_TARGET 0.995   /* the table aims a little higher to absorb the lag of the estimate */
+#endif
+#define NGP 11
+#define NGB 5
+static const double GP[NGP] = { 0.005, 0.01, 0.02, 0.03, 0.05, 0.07, 0.10, 0.15, 0.20, 0.25, 0.30 }, GB[NGB] = { 1, 2, 4, 6, 10 };
+static void adaptive_all(int payload) {
+    const int n = 32, NB = 20000; const int sigs[] = { SIG_MLDSA44, SIG_FALCON512 };
+    struct { const char* name; double p1, b1, p2, b2, sw; } CH[] = {
+        { "calm 1% / noisy 15% (bursts 2 / 6)", 0.01, 2, 0.15, 6, 0.05 },
+        { "calm 2% / noisy 10% (bursts 2 / 4)", 0.02, 2, 0.10, 4, 0.05 },
+        { "calm 1% / noisy 30% (bursts 2 / 10)", 0.01, 2, 0.30, 10, 0.02 },
+    };
+    printf("signature,channel,policy,verified_of_delivered,verified_of_sent,air_bytes_per_packet,overhead_per_packet\n");
+    for (unsigned si = 0; si < 2; ++si) {
+        int sig = sigs[si];
+        int TM[NGP][NGB], TK[NGP][NGB];
+        for (int a = 0; a < NGP; ++a) for (int c = 0; c < NGB; ++c) {
+            best_t b = optimise(sig, payload, GP[a], GB[c], ADAPT_TARGET, n);
+            if (!b.n) { TM[a][c] = -1; TK[a][c] = -1; continue; }     /* target not reachable: use the nearest feasible entry */
+            TM[a][c] = b.m; TK[a][c] = b.k;
+        }
+        best_t calm, noisy;
+        for (unsigned ci = 0; ci < sizeof CH / sizeof *CH; ++ci) {
+            calm = optimise(sig, payload, CH[ci].p1, CH[ci].b1, 0.99, n);
+            noisy = optimise(sig, payload, CH[ci].p2, CH[ci].b2, 0.99, n);
+            if (!noisy.n) { noisy.m = n - 1; noisy.k = 1; }
+            for (int pol = 0; pol < 3; ++pol) {
+                ge_t ch1, ch2; ge_init(&ch1, CH[ci].p1, CH[ci].b1, 900 + ci); ge_init(&ch2, CH[ci].p2, CH[ci].b2, 950 + ci);
+                uint64_t rs = 4242 + ci; int regime = 0;
+                double pe = CH[ci].p1, be = 1.5;              /* device estimates (adaptive) */
+                int *got = malloc(sizeof(int) * (NB + 1) * n), *mm = malloc(sizeof(int) * (NB + 1)), *kk = malloc(sizeof(int) * (NB + 1));
+                int* fr = calloc(NB + 1, sizeof(int)); double bytes = 0; long rx = 0, ver = 0;
+                for (int b = 0; b <= NB; ++b) {
+                    /* parameters of batch b, chosen before it closes */
+                    if (pol == 0) { mm[b] = calm.m; kk[b] = calm.k; }
+                    else if (pol == 1) { mm[b] = noisy.m; kk[b] = noisy.k; }
+                    else {
+                        int a = 0; while (a < NGP - 1 && GP[a] < pe) ++a;          /* round up */
+                        int c = 0; while (c < NGB - 1 && GB[c] < be) ++c;
+                        while (TM[a][c] < 0 && (a > 0 || c > 0)) { if (c > 0) --c; else --a; }
+                        mm[b] = TM[a][c]; kk[b] = TK[a][c];
+                    }
+                    size_t fl = b > 0 ? ours_frame(sig, n, mm[b - 1], kk[b - 1], payload) : (size_t)(QUILL_HDR_DATA + payload + QUILL_TAG);
+                    int lost = 0, runs = 0, prev = 0;
+                    for (int i = 0; i < n; ++i) {
+                        rs ^= rs << 13; rs ^= rs >> 7; rs ^= rs << 17;
+                        if ((double)(rs >> 11) / 9007199254740992.0 < CH[ci].sw / n) regime ^= 1;   /* regime switch */
+                        int ok = frame_ok(regime ? &ch2 : &ch1, fl); bytes += air(fl);
+                        got[b * n + i] = ok;
+                        if (b > 0 && ok) fr[b - 1]++;
+                        if (!ok) { lost++; if (!prev) runs++; }
+                        prev = !ok;
+                    }
+                    /* gateway feedback after the batch (one small frame per batch, counted) */
+                    if (pol == 2) {
+                        bytes += air(4);
+                        double pl = (double)lost / n, bl = runs ? (double)lost / runs : 1.0;
+                        pe = 0.5 * pe + 0.5 * pl;
+                        if (runs) be = 0.5 * be + 0.5 * bl;
+                    }
+                }
+                for (int b = 0; b < NB; ++b) {
+                    int lost = 0; for (int i = 0; i < n; ++i) lost += !got[b * n + i];
+                    int me = mm[b] < n ? mm[b] : n;
+                    int okb = lost <= me && fr[b] >= kk[b];
+                    for (int i = 0; i < n; ++i) if (got[b * n + i]) { rx++; if (okb) ver++; }
+                }
+                bytes /= (double)(NB + 1) * n;
+                static const char* PN[] = { "fixed for the calm regime", "fixed for the noisy regime", "adaptive (gateway feedback)" };
+                printf("%s,%s,%s,%.4f,%.4f,%.1f,%.1f\n", sig_info(sig)->name, CH[ci].name, PN[pol], (double)ver / rx, (double)ver / ((double)NB * n), bytes, bytes - payload);
+                fflush(stdout);
+                free(got); free(mm); free(kk); free(fr);
+            }
+        }
+    }
+}
+
+/* fair comparison: SAIDA-style dispersal of all n leaves (m = n) with k tuned to
+   the same target, against QUILL with m and k tuned */
+static void fair_all(int payload) {
+    printf("signature,n,loss,burst,quill_m,quill_k,quill_overhead,full_k,full_overhead,saving_bytes\n");
+    static const double P[] = { 0.01, 0.02, 0.05, 0.10, 0.20 }, BU[] = { 1, 4 };
+    int sigs[] = { SIG_MLDSA44, SIG_FALCON512, SIG_LMS };
+    for (int s = 0; s < 3; ++s) for (int n = 32; n <= 64; n *= 2) for (int bi = 0; bi < 2; ++bi) for (int pi = 0; pi < 5; ++pi) {
+        best_t q = optimise(sigs[s], payload, P[pi], BU[bi], 0.99, n);
+        /* full list: m = n, scan k */
+        double fo = 1e18; int fk = 0;
+        for (int kk = n; kk >= 1; --kk) {
+            size_t fl = ours_frame(sigs[s], n, n, kk, payload); double o = air(fl) - payload;
+            if (o >= fo) break;
+            if (p_ok_seg(n, n, kk, P[pi], BU[bi], segs(fl)) >= 0.99) { fo = o; fk = kk; break; }
+        }
+        printf("%s,%d,%.2f,%.0f,%d,%d,%.1f,%d,%.1f,%.1f\n", sig_info(sigs[s])->name, n, P[pi], BU[bi], q.m, q.k, q.n ? q.ovh : -1, fk, fk ? fo : -1, (q.n && fk) ? fo - q.ovh : 0);
+        fflush(stdout);
+    }
+}
+
 int main(int argc, char** argv) {
     crypto_init(); gf_init();
     sig_info(0);
@@ -277,6 +383,8 @@ int main(int argc, char** argv) {
     if (!strcmp(argv[1], "validate")) validate();
     else if (!strcmp(argv[1], "optimise")) optimise_all(argc > 2 ? atoi(argv[2]) : 16, argc > 3 ? atoi(argv[3]) : 0);
     else if (!strcmp(argv[1], "compare")) compare_all(argc > 2 ? atoi(argv[2]) : 16);
+    else if (!strcmp(argv[1], "adaptive")) adaptive_all(argc > 2 ? atoi(argv[2]) : 16);
+    else if (!strcmp(argv[1], "fair")) fair_all(argc > 2 ? atoi(argv[2]) : 16);
     else if (!strcmp(argv[1], "pok")) {   /* sim pok n m k p burst */
         printf("%.6f\n", p_ok(atoi(argv[2]), atoi(argv[3]), atoi(argv[4]), atof(argv[5]), atof(argv[6])));
     }

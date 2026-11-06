@@ -7,11 +7,13 @@ static void put32(uint8_t* p, uint32_t v) { p[0] = (uint8_t)(v >> 24); p[1] = (u
 static uint32_t get32(const uint8_t* p) { return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3]; }
 
 /* ------------------------------------------------------------- parameters */
-int quill_m_eff(const quill_params_t* p, int nb) { return p->m < nb ? p->m : nb; }
-size_t quill_D_len(const quill_params_t* p, int nb) {
-    return sig_info(p->sig)->sig_len + (size_t)quill_m_eff(p, nb) * QUILL_LEAF;
+/* m and k may change from batch to batch; they travel in the fragment header */
+int quill_m_eff(int m, int nb) { return m < nb ? m : nb; }
+size_t quill_D_len(int sig, int nb, int m) {
+    return sig_info(sig)->sig_len + (size_t)quill_m_eff(m, nb) * QUILL_LEAF;
 }
-size_t quill_frag_len(const quill_params_t* p, int nb) { return disp_frag_size(quill_D_len(p, nb), p->k); }
+size_t quill_frag_len(int sig, int nb, int m, int k) { return disp_frag_size(quill_D_len(sig, nb, m), k); }
+static int mk_valid(int n, int m, int k) { return k >= 1 && k <= n && m >= 0 && m <= n && m + n <= 255; }
 
 /* ----------------------------------------------------------- key schedule */
 static void transcript(uint32_t sid, const uint8_t* ct, size_t ctn, const uint8_t* gw_pk, size_t gwn,
@@ -113,14 +115,11 @@ int quill_dev_init(quill_dev_t* d, const quill_params_t* p, sig_key_t* sk,
                  const uint8_t* gw_pk, uint32_t sid, quill_emit_fn emit, void* ectx) {
     memset(d, 0, sizeof *d);
     d->p = *p; d->sk = sk; d->sid = sid; d->emit = emit; d->ectx = ectx;
-    if (p->n < 1 || p->n > QUILL_MAX_N || p->k < 1 || p->k > p->n || p->m < 0 || p->m + p->n > 255) return -1;
+    if (p->n < 1 || p->n > QUILL_MAX_N || !mk_valid(p->n, p->m, p->k)) return -1;
+    d->cur_m = p->m; d->cur_k = p->k;
     size_t ctn = kem_ct_len(p->kem), pkn = kem_pk_len(p->kem), devn;
     const uint8_t* dpk = sig_pk(sk, &devn);
     size_t sl = sig_info(p->sig)->sig_len;
-    d->Dcap = quill_D_len(p, p->n);
-    d->D = (uint8_t*)malloc(d->Dcap);
-    d->frag = (uint8_t*)malloc((size_t)p->n * quill_frag_len(p, p->n));
-    if (!d->D || !d->frag) return -1;
     if (dev_need(d, 5 + ctn + sl + 64)) return -1;
     uint8_t* f = d->buf; uint8_t ss[32];
     f[0] = 0x00; put32(f + 1, sid);
@@ -144,7 +143,8 @@ static int dev_aux(quill_dev_t* d, int j) {
     size_t flen = QUILL_HDR_AUX + d->F + QUILL_TAG;
     if (dev_need(d, flen)) return -1;
     uint8_t* f = d->buf; uint8_t k[32], iv[12];
-    f[0] = 0x02; put32(f + 1, d->sid); put32(f + 5, d->fb); f[9] = (uint8_t)d->fn; f[10] = (uint8_t)j;
+    f[0] = 0x02; put32(f + 1, d->sid); put32(f + 5, d->fb);
+    f[9] = (uint8_t)d->fn; f[10] = (uint8_t)d->fm; f[11] = (uint8_t)d->fk; f[12] = (uint8_t)j;
     aux_key(d->kb_prev, j, k); aux_nonce(d->fb, j, iv);
     if (gcm_enc(k, iv, f, QUILL_HDR_AUX, d->frag + (size_t)j * d->F, d->F, f + QUILL_HDR_AUX)) return -2;
     memset(k, 0, 32);
@@ -167,19 +167,21 @@ static int dev_close_batch(quill_dev_t* d, int send_now) {
     uint8_t root[32], msg[96];
     quill_root(d->th, d->b, d->leaf, nb, root);
     size_t ml = quill_batch_msg(d->th, d->b, nb, root, msg);
+    int me = quill_m_eff(d->cur_m, nb), k = d->cur_k;
+    size_t Dn = quill_D_len(d->p.sig, nb, d->cur_m), F = disp_frag_size(Dn, k);
+    if (Dn > d->Dcap) { free(d->D); d->D = (uint8_t*)malloc(Dn); d->Dcap = d->D ? Dn : 0; if (!d->D) return -1; }
+    if ((size_t)d->p.n * F > d->fragcap) { free(d->frag); d->frag = (uint8_t*)malloc((size_t)d->p.n * F); d->fragcap = d->frag ? (size_t)d->p.n * F : 0; if (!d->frag) return -1; }
     size_t sl = sig_info(d->p.sig)->sig_len, siglen = sl;
     if (sig_sign(d->sk, msg, ml, d->D, &siglen)) return -2;
     if (siglen < sl) memset(d->D + siglen, 0, sl - siglen);
     d->signatures++;
-    int me = quill_m_eff(&d->p, nb);
     const uint8_t* lp[QUILL_MAX_N]; uint8_t* pp[QUILL_MAX_N];
     for (int j = 0; j < nb; ++j) lp[j] = d->leaf[j];
     for (int r = 0; r < me; ++r) pp[r] = d->D + sl + (size_t)r * QUILL_LEAF;
     ecc_parity(lp, nb, pp, me, QUILL_LEAF);
-    size_t Dn = quill_D_len(&d->p, nb);
-    d->F = disp_frag_size(Dn, d->p.k);
-    disp_encode(d->D, Dn, d->p.k, d->p.n, d->frag);
-    d->fn = nb; d->fb = d->b; d->fsent = 0;
+    d->F = F;
+    disp_encode(d->D, Dn, k, d->p.n, d->frag);
+    d->fn = nb; d->fm = d->cur_m; d->fk = k; d->fb = d->b; d->fsent = 0;
     memcpy(d->kb_prev, d->kb, 32);
     /* next batch */
     d->b++; d->i = 0;
@@ -196,7 +198,8 @@ int quill_dev_send(quill_dev_t* d, const uint8_t* payload, size_t len, int urgen
     if (dev_need(d, flen)) return -1;
     uint8_t* f = d->buf;
     f[0] = 0x01; put32(f + 1, d->sid); put32(f + 5, d->b); f[9] = (uint8_t)i;
-    f[10] = carry ? (uint8_t)d->fn : 0; f[11] = carry ? (uint8_t)d->fsent : 0;
+    f[10] = carry ? (uint8_t)d->fn : 0; f[11] = carry ? (uint8_t)d->fm : 0;
+    f[12] = carry ? (uint8_t)d->fk : 0; f[13] = carry ? (uint8_t)d->fsent : 0;
     /* plaintext = fragment of the previous batch's authenticator || payload */
     if (dev_need_pt(d, F + len)) return -1;
     if (carry) { memcpy(d->pt, d->frag + (size_t)d->fsent * d->F, F); d->fsent++; if (d->fsent == d->p.n) d->fn = 0, d->fsent = 0; }
@@ -213,6 +216,12 @@ int quill_dev_send(quill_dev_t* d, const uint8_t* payload, size_t len, int urgen
     if (d->emit) d->emit(d->ectx, f, flen, 1);
     if (urgent) return dev_close_batch(d, d->p.urgent_aux);
     if (d->i == d->p.n) return dev_close_batch(d, 0);
+    return 0;
+}
+
+int quill_dev_set_mk(quill_dev_t* d, int m, int k) {
+    if (!mk_valid(d->p.n, m, k)) return -1;
+    d->cur_m = m; d->cur_k = k;          /* applies to the batch that closes next */
     return 0;
 }
 
@@ -258,12 +267,12 @@ static quill_gw_batch_t* gw_batch(quill_gw_t* g, uint32_t b, int create) {
 /* try to rebuild D and verify; final = no more fragments will come */
 static void gw_settle(quill_gw_t* g, quill_gw_batch_t* B, int final) {
     if (B->state != 0) return;
-    if (!B->nb || B->nfr < g->p.k) { if (final) goto fail; return; }
+    if (!B->nb || B->nfr < B->k) { if (final) goto fail; return; }
     {
-        int nb = B->nb, me = quill_m_eff(&g->p, nb);
-        size_t Dn = quill_D_len(&g->p, nb), sl = sig_info(g->p.sig)->sig_len;
+        int nb = B->nb, me = quill_m_eff(B->m, nb);
+        size_t Dn = quill_D_len(g->p.sig, nb, B->m), sl = sig_info(g->p.sig)->sig_len;
         uint8_t* D = (uint8_t*)malloc(Dn);
-        if (!D || disp_decode(B->frag, B->fhave, g->p.k, g->p.n, Dn, D)) { free(D); goto fail; }
+        if (!D || disp_decode(B->frag, B->fhave, B->k, g->p.n, Dn, D)) { free(D); goto fail; }
         int miss[QUILL_MAX_N], ne = 0;
         for (int i = 0; i < nb; ++i) if (!B->have[i]) miss[ne++] = i;
         if (ne > me) { free(D); goto fail; }
@@ -287,17 +296,17 @@ fail:
     if (g->on_batch) g->on_batch(g->cctx, B->b, B->nb, 0, B->have);
 }
 
-static void gw_add_frag(quill_gw_t* g, uint32_t b, int fn, int fj, const uint8_t* fr) {
+static void gw_add_frag(quill_gw_t* g, uint32_t b, int fn, int fm, int fk, int fj, const uint8_t* fr) {
     quill_gw_batch_t* B = gw_batch(g, b, 1);
-    if (!B || B->state != 0 || fn < 1 || fn > g->p.n || fj >= g->p.n) return;
+    if (!B || B->state != 0 || fn < 1 || fn > g->p.n || fj >= g->p.n || !mk_valid(g->p.n, fm, fk)) return;
     if (!B->nb) {
-        B->nb = fn; B->F = quill_frag_len(&g->p, fn);
+        B->nb = fn; B->m = fm; B->k = fk; B->F = quill_frag_len(g->p.sig, fn, fm, fk);
         B->frag = (uint8_t*)malloc((size_t)g->p.n * B->F);
     }
-    if (fn != B->nb || !B->frag || B->fhave[fj]) return;
+    if (fn != B->nb || fm != B->m || fk != B->k || !B->frag || B->fhave[fj]) return;
     memcpy(B->frag + (size_t)fj * B->F, fr, B->F);
     B->fhave[fj] = 1; B->nfr++;
-    if (B->nfr >= g->p.k) gw_settle(g, B, 0);
+    if (B->nfr >= B->k) gw_settle(g, B, 0);
 }
 
 int quill_gw_recv(quill_gw_t* g, const uint8_t* f, size_t len) {
@@ -319,22 +328,23 @@ int quill_gw_recv(quill_gw_t* g, const uint8_t* f, size_t len) {
     if (!g->ready || sid != g->sid) return -4;
     if (f[0] == 0x02) {
         if (len < QUILL_HDR_AUX) return -1;
-        uint32_t b = get32(f + 5); int fn = f[9], fj = f[10];
-        size_t F = fn >= 1 && fn <= g->p.n ? quill_frag_len(&g->p, fn) : 0;
+        uint32_t b = get32(f + 5); int fn = f[9], fm = f[10], fk = f[11], fj = f[12];
+        size_t F = fn >= 1 && fn <= g->p.n && mk_valid(g->p.n, fm, fk) ? quill_frag_len(g->p.sig, fn, fm, fk) : 0;
         if (!F || fj >= g->p.n || len != QUILL_HDR_AUX + F + QUILL_TAG) return -1;
         uint8_t ck[32], kb[32], k[32], iv[12];
         uint8_t* fr = (uint8_t*)malloc(F);
         if (!fr) return -1;
         gw_chain_to(g, b, ck); batch_key(ck, kb); aux_key(kb, fj, k); aux_nonce(b, fj, iv);
         if (gcm_dec(k, iv, f, QUILL_HDR_AUX, f + QUILL_HDR_AUX, F + QUILL_TAG, fr)) { free(fr); g->rx_auth_fail++; return -5; }
-        gw_add_frag(g, b, fn, fj, fr);
+        gw_add_frag(g, b, fn, fm, fk, fj, fr);
         free(fr);
         return 0;
     }
     if (f[0] != 0x01 || len < QUILL_HDR_DATA + QUILL_TAG) return -1;
-    uint32_t b = get32(f + 5); int i = f[9], fn = f[10], fj = f[11];
-    size_t F = fn ? quill_frag_len(&g->p, fn) : 0;
-    if (i >= g->p.n || (fn && fj >= g->p.n) || len < QUILL_HDR_DATA + F + QUILL_TAG) return -1;
+    uint32_t b = get32(f + 5); int i = f[9], fn = f[10], fm = f[11], fk = f[12], fj = f[13];
+    if (fn && (fn > g->p.n || fj >= g->p.n || !mk_valid(g->p.n, fm, fk))) return -1;
+    size_t F = fn ? quill_frag_len(g->p.sig, fn, fm, fk) : 0;
+    if (i >= g->p.n || len < QUILL_HDR_DATA + F + QUILL_TAG) return -1;
     const uint8_t* ct = f + QUILL_HDR_DATA; size_t ctn = len - QUILL_HDR_DATA;
     /* 1) immediate symmetric authenticity */
     uint8_t ck[32], kb[32], k[32], kc[32], iv[12];
@@ -352,7 +362,7 @@ int quill_gw_recv(quill_gw_t* g, const uint8_t* f, size_t len) {
         B->have[i] = 1;
     }
     /* 3) the (authenticated) fragment belongs to the previous batch */
-    if (fn && b > 0) gw_add_frag(g, b - 1, fn, fj, pt);
+    if (fn && b > 0) gw_add_frag(g, b - 1, fn, fm, fk, fj, pt);
     free(pt);
     return 0;
 }

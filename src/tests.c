@@ -115,7 +115,7 @@ static int drop_data(int j, int kind, const uint8_t* f) {
 static int drop_frag(int j, int kind, const uint8_t* f) {
     (void)j; if (kind != 1) return 0;
     uint32_t b = ((uint32_t)f[5] << 24) | (f[6] << 16) | (f[7] << 8) | f[8];
-    return (int)b == g_drop_b + 1 && f[10] && f[11] < g_drop_frag;
+    return (int)b == g_drop_b + 1 && f[10] && f[13] < g_drop_frag;
 }
 
 static void test_e2e(int sig) {
@@ -206,7 +206,7 @@ static void test_evidence(int sig) {
     run(sig, 16, 4, 12, 37, NULL, &ev, &g, w);          /* last batch has 5 packets */
     /* record 7 of batch 1: frame index 1 + 16 + 7 */
     int fi = 1 + 16 + 7; const uint8_t* fr = w->f[fi];
-    size_t F = fr[10] ? quill_frag_len(&g.p, fr[10]) : 0;
+    size_t F = fr[10] ? quill_frag_len(g.p.sig, fr[10], fr[11], fr[12]) : 0;
     const uint8_t* ct = fr + QUILL_HDR_DATA; size_t ctn = w->n[fi] - QUILL_HDR_DATA;
     quill_evidence_t e;
     int rc = quill_gw_evidence(&g, 1, 7, fr, ct, ctn, &e);
@@ -247,6 +247,29 @@ static void test_urgent(int sig) {
     quill_dev_free(&d); quill_gw_free(&g); wire_free(w); free(w);
 }
 
+/* m and k change from batch to batch (adaptive operation) */
+static void test_adaptive(int sig) {
+    quill_params_t p = { sig, KEM_MLKEM512, 16, 4, 12, 1 };
+    kem_gw_t* kg = kem_gw_keygen(KEM_MLKEM512);
+    wire_t* w = calloc(1, sizeof *w); quill_dev_t d; quill_gw_t g; gwev_t ev;
+    quill_dev_init(&d, &p, g_keys[sig], kem_gw_pk(kg), 3, emit, w);
+    static const int M[4] = { 4, 9, 0, 15 }, K[4] = { 6, 6, 16, 3 };
+    uint8_t pl[12] = { 0 };
+    for (int b = 0; b < 4; ++b) { CHECK(quill_dev_set_mk(&d, M[b], K[b]) == 0, "set m and k"); for (int t = 0; t < 16; ++t) quill_dev_send(&d, pl, 12, 0); }
+    CHECK(quill_dev_set_mk(&d, 3, 17) != 0 && quill_dev_set_mk(&d, -1, 4) != 0, "invalid m or k refused");
+    quill_dev_close(&d);
+    size_t pkn; const uint8_t* pk = sig_pk(g_keys[sig], &pkn);
+    /* drop 9 packets of batch 1 (m = 9) and 10 frames of batch 2, which carry fragments of batch 1 (k = 6) */
+    quill_gw_init(&g, &p, kg, pk, pkn); memset(&ev, 0, sizeof ev); g.on_batch = on_batch; g.cctx = &ev;
+    for (int j = 0; j < w->cnt; ++j) {
+        int drop = (j >= 1 + 16 && j < 1 + 16 + 9) || (j >= 1 + 32 && j < 1 + 32 + 10);
+        if (!drop) quill_gw_recv(&g, w->f[j], w->n[j]);
+    }
+    quill_gw_finish(&g);
+    CHECK(ev.ok == 3 && ev.fail == 1, "per-batch m and k: batch 1 survives 9 losses with m = 9; batch 2 (m = 0) fails");
+    quill_dev_free(&d); quill_gw_free(&g); wire_free(w); free(w);
+}
+
 int main(int argc, char** argv) {
     crypto_init();
     int only = argc > 1 ? atoi(argv[1]) : -1;
@@ -262,6 +285,7 @@ int main(int argc, char** argv) {
         test_attacks(s);
         test_evidence(s);
         test_urgent(s);
+        test_adaptive(s);
         printf("%-24s %s\n", sig_info(s)->name, fails == f0 ? "ok" : "FAILED");
     }
     printf("\n%d checks passed, %d failed\n", passed, fails);

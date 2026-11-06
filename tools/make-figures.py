@@ -29,44 +29,73 @@ def box(ax, x, y, w, h, text, fc="#ffffff", ec=INK2, fs=8, bold=False):
 def arrow(ax, x1, y1, x2, y2, col=INK2, ls="-", lw=1.0):
     ax.add_patch(FancyArrowPatch((x1, y1), (x2, y2), arrowstyle="-|>", mutation_scale=9, color=col, lw=lw, linestyle=ls))
 
-fig, ax = plt.subplots(figsize=(7.2, 4.0)); ax.set_xlim(0, 14); ax.set_ylim(0, 8.0); ax.axis("off")
-box(ax, 0.2, 5.6, 2.6, 1.8, "Wearable sensor\n(Cortex-M4, BLE)\nsigning key sk_D", "#eef4fc", bold=False)
-box(ax, 5.6, 5.6, 2.8, 1.8, "Gateway / hospital\nedge (ML-KEM +\nX25519 keys)", "#fdf0ea")
-box(ax, 11.0, 5.6, 2.8, 1.8, "EHR archive,\nauditor or court\n(device public key)", "#eef7f1")
-arrow(ax, 2.85, 6.9, 5.55, 6.9); ax.text(4.2, 7.05, "INIT: KEM ct + signature", ha="center", fontsize=6.5, color=INK2)
-arrow(ax, 2.85, 6.0, 5.55, 6.0); ax.text(4.2, 6.15, "DATA frames (lossy)", ha="center", fontsize=6.5, color=INK2)
-arrow(ax, 8.45, 6.5, 10.95, 6.5); ax.text(9.7, 6.7, "record + evidence", ha="center", fontsize=6.5, color=INK2)
-ax.text(9.7, 6.05, "(+ one packet key)", ha="center", fontsize=6.5, color=INK2)
-# timeline of two batches
-y0 = 3.6; ax.text(0.2, y0 + 1.25, "Batch b", fontsize=8, color=INK, fontweight="bold")
-ax.text(7.2, y0 + 1.25, "Batch b+1", fontsize=8, color=INK, fontweight="bold")
+fig, ax = plt.subplots(figsize=(7.4, 5.6)); ax.set_xlim(0, 14.4); ax.set_ylim(0, 11.0); ax.axis("off")
+BL, OR, GR, RED = "#2a78d6", "#eb6834", "#1f9e6e", "#c0392b"
+def cross(x, y, w, h):
+    ax.plot([x, x + w], [y, y + h], color=RED, lw=1.3); ax.plot([x, x + w], [y + h, y], color=RED, lw=1.3)
+def tag(x, y, t, fs=8):
+    ax.text(x, y, t, fontsize=fs, color=INK, fontweight="bold", va="center")
+# (a) parties
+tag(0.1, 10.75, "(a) Parties")
+box(ax, 0.2, 8.85, 3.0, 1.5, "Wearable device D\nCortex-M4 + BLE\nsigning key $sk_D$", "#eef4fc", fs=7.5)
+box(ax, 5.7, 8.85, 3.0, 1.5, "Gateway G\nML-KEM-512 and\nX25519 keys", "#fdf0ea", fs=7.5)
+box(ax, 11.2, 8.85, 3.0, 1.5, "Auditor A\n(EHR, insurer, court)\nknows only $pk_D$", "#eef7f1", fs=7.5)
+arrow(ax, 3.25, 10.0, 5.65, 10.0); ax.text(4.45, 10.13, "INIT (hybrid KEM)", ha="center", fontsize=6.3, color=INK2)
+arrow(ax, 3.25, 9.4, 5.65, 9.4); ax.text(4.45, 9.53, "DATA frames, lossy", ha="center", fontsize=6.3, color=INK2)
+arrow(ax, 5.65, 9.05, 3.25, 9.05, col=GR, ls="--", lw=0.8); ax.text(4.45, 8.65, "FEEDBACK (adaptive m, k)", ha="center", fontsize=6.3, color=GR)
+arrow(ax, 8.75, 9.6, 11.15, 9.6); ax.text(9.95, 9.75, "record + evidence", ha="center", fontsize=6.3, color=INK2)
+ax.text(9.95, 9.25, r"(+ $k_{b,i}$ to open)", ha="center", fontsize=6.3, color=INK2)
+# (b) device
+tag(0.1, 8.0, "(b) Device: batch b is signed; its authenticator rides inside batch b+1")
+y0 = 5.3; w = 0.66; g = 0.74; top = y0 + 0.75
 for j in range(8):
-    x = 0.2 + j * 0.82
-    ax.add_patch(Rectangle((x, y0), 0.72, 0.9, fc="#eef4fc", ec="#2a78d6", lw=0.8))
-    ax.text(x + 0.36, y0 + 0.45, f"c{j+1}", ha="center", va="center", fontsize=7)
-for j in range(8):
-    x = 7.2 + j * 0.82
-    ax.add_patch(Rectangle((x, y0), 0.72, 0.9, fc="#eef4fc", ec="#2a78d6", lw=0.8))
-    ax.add_patch(Rectangle((x, y0 + 0.6), 0.72, 0.3, fc="#fde3d6", ec="#eb6834", lw=0.6))
-    ax.text(x + 0.36, y0 + 0.75, f"f{j+1}", ha="center", va="center", fontsize=6)
-    ax.text(x + 0.36, y0 + 0.3, f"c{j+1}", ha="center", va="center", fontsize=7)
-for j in (2, 5):   # lost packets
-    x = 0.2 + j * 0.82; ax.plot([x, x + 0.72], [y0, y0 + 0.9], color="#c0392b", lw=1.2); ax.plot([x, x + 0.72], [y0 + 0.9, y0], color="#c0392b", lw=1.2)
-x = 7.2 + 4 * 0.82; ax.plot([x, x + 0.72], [y0, y0 + 0.9], color="#c0392b", lw=1.2); ax.plot([x, x + 0.72], [y0 + 0.9, y0], color="#c0392b", lw=1.2)
-ax.text(3.45, y0 - 0.4, "leaf_i = H(th, b, i, KC_i, c_i); R_b = Merkle root", ha="center", fontsize=6.5, color=INK2)
-ax.text(3.45, y0 - 0.8, "sigma_b = Sign(sk_D, th, b, n, R_b)", ha="center", fontsize=6.5, color=INK2)
-ax.text(10.45, y0 - 0.4, "D_b = sigma_b || m parity leaves -> n fragments", ha="center", fontsize=6.5, color=INK2)
-ax.text(10.45, y0 - 0.8, "f_j encrypted with packet j; any k rebuild D_b", ha="center", fontsize=6.5, color=INK2)
-arrow(ax, 6.8, y0 + 0.45, 7.15, y0 + 0.45, col="#eb6834")
-ax.text(0.2, 1.75, "Gateway:", fontsize=8, fontweight="bold", color=INK)
-ax.text(1.75, 1.75, "each c_i is decrypted and authenticated at once (per-packet AES-256-GCM key, no added delay);",
-        fontsize=7.5, color=INK2)
-ax.text(1.75, 1.25, "after k fragments of batch b+1 it rebuilds D_b, recovers up to m missing leaves from the parity,",
-        fontsize=7.5, color=INK2)
-ax.text(1.75, 0.75, "recomputes R_b and verifies sigma_b: every received packet of batch b becomes non-repudiable.",
-        fontsize=7.5, color=INK2)
-ax.text(0.2, 0.2, "Lost packets are crossed out. Keys: CK_b+1 = HKDF(CK_b), K_b = HKDF(CK_b), k_b,i = HKDF(K_b, i), KC_b,i = H(k_b,i).",
-        fontsize=7, color=INK2)
+    x = 0.2 + j * g
+    ax.add_patch(Rectangle((x, y0), w, 0.75, fc="#eef4fc", ec=BL, lw=0.8))
+    ax.text(x + w / 2, y0 + 0.37, f"$c_{j+1}$", ha="center", va="center", fontsize=7.5)
+for j in (2, 5): cross(0.2 + j * g, y0, w, 0.75)
+ax.text(3.1, y0 - 0.32, r"GCM under $k_{b,i}$;  $L_i = H(0, b, i, th, KC_i, c_i)$", ha="center", fontsize=6.3, color=INK2)
+lv = [(0.2 + j * g + w / 2, top) for j in range(8)]
+for yy in (6.5, 6.95, 7.35):
+    nx = []
+    for i in range(len(lv) // 2):
+        (x1, y1), (x2, y2) = lv[2 * i], lv[2 * i + 1]; xm = (x1 + x2) / 2
+        ax.plot([x1, xm], [y1, yy], color=INK2, lw=0.6); ax.plot([x2, xm], [y2, yy], color=INK2, lw=0.6)
+        ax.plot([xm], [yy], "o", ms=2.2, color=INK2); nx.append((xm, yy))
+    lv = nx
+ax.text(lv[0][0] + 0.15, 7.42, r"$R_b$", fontsize=7.5, va="center")
+box(ax, 6.25, 6.6, 2.05, 0.6, r"$\sigma_b=\mathrm{Sign}(sk_D, R_b)$", "#ffffff", fs=6.3)
+box(ax, 6.25, 5.45, 2.05, 0.7, "$m$ parity symbols\n$P$ of the leaves", "#ffffff", fs=6.3)
+arrow(ax, lv[0][0] + 0.55, 7.35, 6.2, 6.95)
+arrow(ax, 6.07, 5.8, 6.22, 5.8)
+box(ax, 8.62, 5.95, 1.65, 0.8, r"$D_b=\sigma_b\,\|\,P$" + "\n" + r"$\to n$ fragments", "#fde3d6", ec=OR, fs=6.3)
+arrow(ax, 8.33, 6.85, 8.6, 6.55); arrow(ax, 8.33, 5.85, 8.6, 6.15)
+xb = 10.75
+for j in range(4):
+    x = xb + j * g
+    ax.add_patch(Rectangle((x, y0), w, 0.75, fc="#eef4fc", ec=BL, lw=0.8))
+    ax.add_patch(Rectangle((x, y0 + 0.48), w, 0.27, fc="#fde3d6", ec=OR, lw=0.6))
+    ax.text(x + w / 2, y0 + 0.615, f"$f_{j+1}$", ha="center", va="center", fontsize=6)
+    ax.text(x + w / 2, y0 + 0.23, f"$c_{j+1}$", ha="center", va="center", fontsize=7)
+ax.text(xb + 4 * g + 0.02, y0 + 0.37, "...", fontsize=8, va="center")
+cross(xb + 3 * g, y0, w, 0.75)
+arrow(ax, 10.3, 6.35, 10.85, y0 + 0.8, col=OR)
+ax.text(xb + 1.6, y0 - 0.32, r"batch b+1: any $k$ of $n$ rebuild $D_b$", ha="center", fontsize=6.3, color=INK2)
+# (c) gateway pipeline
+tag(0.1, 4.35, "(c) Gateway")
+steps = [("decrypt and check\neach packet at once", "#fdf0ea"), ("hash the received\npackets into leaves", "#fdf0ea"),
+         ("rebuild $D_b$ from\nany $k$ fragments", "#fde3d6"), ("recover up to $m$\nlost leaves from $P$", "#fde3d6"),
+         ("recompute $R_b$\nand verify $\\sigma_b$", "#eef7f1")]
+for t, (txt, fc) in enumerate(steps):
+    x = 0.2 + t * 2.88
+    box(ax, x, 2.95, 2.45, 1.0, txt, fc, fs=6.8)
+    if t: arrow(ax, x - 0.42, 3.45, x - 0.03, 3.45)
+ax.text(1.42, 2.62, "reading usable at once (G1)", ha="center", fontsize=6.3, color=INK2)
+ax.text(12.94, 2.62, "received packets of b are\nnon-repudiable (G2)", ha="center", va="top", fontsize=6.3, color=INK2)
+# (d) evidence
+tag(0.1, 1.75, "(d) Evidence for one record and its opening")
+box(ax, 0.2, 0.2, 8.4, 1.15, r"hdr, $c_{b,i}$, $KC_{b,i}$, Merkle path ($\lceil\log_2 n\rceil$ hashes), $\sigma_b$ (shared by the batch)"
+    + "\n" + r"check: leaf $\to$ path $\to R_b$, then Verify$(pk_D, \sigma_b)$", "#ffffff", fs=6.6)
+box(ax, 8.9, 0.2, 5.3, 1.15, r"open: G reveals $k_{b,i}$; A checks $H(k_{b,i}) = KC_{b,i}$" + "\nand decrypts: exactly one reading", "#eef7f1", fs=6.6)
 fig.savefig(O + "fig-overview.png"); plt.close(fig)
 
 # ------------------------------------------- Fig. 2 signing cost and size on the device

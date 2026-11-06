@@ -3,68 +3,68 @@ op_leaf                sig0 n32   cyc          7434       0.116 ms@64MHz  stack 
 op_hkdf_expand         sig0 n32   cyc         15976       0.250 ms@64MHz  stack   1408 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig0 n32   cyc         58515       0.914 ms@64MHz  stack   1552 heap      0
+op_packet              sig0 n32   cyc         59435       0.929 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig0 n32   cyc         80517       1.258 ms@64MHz  stack   1552 heap      0
+op_packet              sig0 n32   cyc         82026       1.282 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig1 n32   cyc         50756       0.793 ms@64MHz  stack   1552 heap      0
+op_packet              sig1 n32   cyc         51109       0.799 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig1 n32   cyc         58463       0.913 ms@64MHz  stack   1552 heap      0
+op_packet              sig1 n32   cyc         59361       0.928 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig3 n32   cyc        158896       2.483 ms@64MHz  stack   1552 heap      0
+op_packet              sig3 n32   cyc        163136       2.549 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig3 n32   cyc        212005       3.313 ms@64MHz  stack   1552 heap      0
+op_packet              sig3 n32   cyc        218531       3.415 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig4 n32   cyc         78032       1.219 ms@64MHz  stack   1552 heap      0
+op_packet              sig4 n32   cyc         79429       1.241 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig4 n32   cyc         98791       1.544 ms@64MHz  stack   1552 heap      0
+op_packet              sig4 n32   cyc        101186       1.581 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig5 n32   cyc         45169       0.706 ms@64MHz  stack   1552 heap      0
+op_packet              sig5 n32   cyc         45217       0.707 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig5 n32   cyc         53427       0.835 ms@64MHz  stack   1552 heap      0
+op_packet              sig5 n32   cyc         53786       0.840 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig0 n64   cyc         69702       1.089 ms@64MHz  stack   1552 heap      0
+op_packet              sig0 n64   cyc         70696       1.105 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig0 n64   cyc         77942       1.218 ms@64MHz  stack   1552 heap      0
+op_packet              sig0 n64   cyc         79317       1.239 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig1 n64   cyc         64500       1.008 ms@64MHz  stack   1552 heap      0
+op_packet              sig1 n64   cyc         65367       1.021 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig1 n64   cyc         66791       1.044 ms@64MHz  stack   1552 heap      0
+op_packet              sig1 n64   cyc         68045       1.063 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig3 n64   cyc        118708       1.855 ms@64MHz  stack   1552 heap      0
+op_packet              sig3 n64   cyc        121570       1.900 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig3 n64   cyc        137322       2.146 ms@64MHz  stack   1552 heap      0
+op_packet              sig3 n64   cyc        140811       2.200 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig4 n64   cyc         77625       1.213 ms@64MHz  stack   1552 heap      0
+op_packet              sig4 n64   cyc         79253       1.238 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig4 n64   cyc         85926       1.343 ms@64MHz  stack   1552 heap      0
+op_packet              sig4 n64   cyc         87690       1.370 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig5 n64   cyc         61364       0.959 ms@64MHz  stack   1552 heap      0
+op_packet              sig5 n64   cyc         62231       0.972 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
 prep_fill                prepared
-op_packet              sig5 n64   cyc         66957       1.046 ms@64MHz  stack   1552 heap      0
+op_packet              sig5 n64   cyc         67946       1.062 ms@64MHz  stack   1552 heap      0
 prep_session             prepared
-op_session             sig0 n32   cyc      11574126     180.846 ms@64MHz  stack  11088 heap  28672
+op_session             sig0 n32   cyc      11573925     180.843 ms@64MHz  stack  11184 heap  20480
 prep_fill                prepared
-op_batch               sig0 n32   cyc      18639184     291.237 ms@64MHz  stack   4032 heap  16384
+op_batch               sig0 n32   cyc      16585653     259.151 ms@64MHz  stack   4040 heap  16384
 prep_session             prepared
 prep_fill                prepared
-op_batch               sig0 n32   cyc      16930922     264.546 ms@64MHz  stack   4032 heap  16384
+op_batch               sig0 n32   cyc      19936771     311.512 ms@64MHz  stack   4040 heap  16384

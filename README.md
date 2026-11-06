@@ -29,7 +29,7 @@ forward secrecy per batch.
 | `ext/PQClean/` | the PQClean implementations used (Falcon-512 padded, SPHINCS+-SHA2-128s/f simple, ML-DSA-44), with their licences |
 | `mcu/` | Cortex-M4F firmware and the Unicorn-based emulator that counts cycles, stack and heap |
 | `formal/` | Tamarin model (`pqs.spthy`), per-lemma proof outputs and the script that proves them |
-| `tools/` | figure script, real-data stream runner, host wolfCrypt build script |
+| `tools/` | figure script, real-data stream runner and summary (20 seeds, 95% CI), merge of the emulator results, host wolfCrypt build script |
 | `data/` | MIT-BIH record 100 and MIMIC numerics used by the stream experiments (see `data/README.md`) |
 | `results/` | every CSV and log the paper reports |
 
@@ -55,7 +55,11 @@ cmake --preset release && cmake --build out/build/release -j
 ./out/build/release/sim optimise 16     > results/optimise-16.csv
 ./out/build/release/sim optimise 96     > results/optimise-96.csv
 ./out/build/release/sim compare 16      > results/compare-16.csv
-BIN=out/build/release ./tools/run-streams.sh > results/streams.csv
+./out/build/release/sim fair 16         > results/fair-16.csv
+./out/build/release/sim adaptive 16     > results/adaptive-16.csv
+python3 tools/merge-mcu.py              # results/mcu-*.csv -> results/mcu-all.csv
+BIN=out/build/release ./tools/run-streams.sh > results/streams-runs.csv
+python3 tools/summarise-streams.py results/streams-runs.csv > results/streams.csv
 python3 tools/make-figures.py fig/
 ```
 
@@ -72,6 +76,15 @@ The emulated device measurements are described in `mcu/README.md`; the formal mo
 
 `sim optimise` picks *m* and *k* that minimise the bytes per packet while a batch stays
 verifiable with probability 0.99 under a Gilbert–Elliott loss model.
+
+*m* and *k* may change from batch to batch: every DATA header (14 bytes) carries *n*, *m* and *k*
+of the batch its fragment belongs to. In the adaptive mode (`quill_dev_set_mk`, `sim adaptive`)
+the gateway reports the lost frames and loss runs of each batch, and the device picks (*m*, *k*)
+from a 55-entry table computed with the exact model (target 0.995).
+
+The coding of the signature together with parity of the packet hashes follows Pannetrat and
+Molva (NDSS 2003); QUILL adds the Merkle-root evidence, key commitments, encrypted fragments,
+immediate per-packet authenticity, the hybrid session and the adaptive parameters.
 
 ## Licence
 

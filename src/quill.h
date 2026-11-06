@@ -11,9 +11,11 @@
 
    Wire format
      INIT : 0x00 | sid(4) | kem_ct | sig_init
-     DATA : 0x01 | sid(4) | b(4) | i(1) | fn(1) | fj(1) | GCM(frag(F) || payload) || tag(16)
-     AUX  : 0x02 | sid(4) | b(4) | fn(1) | fj(1) | GCM(frag(F)) || tag(16)
-   fn = size of the batch the fragment belongs to (0: no fragment), fj = index.
+     DATA : 0x01 | sid(4) | b(4) | i(1) | fn fm fk fj (4) | GCM(frag(F) || payload) || tag(16)
+     AUX  : 0x02 | sid(4) | b(4) | fn fm fk fj (4) | GCM(frag(F)) || tag(16)
+   fn = size of the batch the fragment belongs to (0: no fragment), fm and fk =
+   its parity count and fragment threshold (they may change per batch), fj =
+   fragment index.
    In a DATA frame of batch b the fragment belongs to batch b-1. The fragment
    travels inside the AEAD plaintext, so an outsider can neither read nor
    inject fragments (no pollution of the erasure decoder); the 12-byte header
@@ -30,25 +32,25 @@ extern "C" {
 
 #define QUILL_LEAF      32
 #define QUILL_MAX_N     128
-#define QUILL_HDR_DATA  12
-#define QUILL_HDR_AUX   11
+#define QUILL_HDR_DATA  14
+#define QUILL_HDR_AUX   13
 #define QUILL_TAG       16
 
 typedef struct {
     int sig;          /* enum sig_id */
     int kem;          /* KEM_MLKEM512 / KEM_MLKEM768 */
     int n;            /* batch size */
-    int m;            /* leaf parity symbols (tolerated losses per batch) */
-    int k;            /* fragments needed to rebuild D (of n) */
+    int m;            /* initial leaf parity symbols (tolerated losses per batch) */
+    int k;            /* initial fragments needed to rebuild D (of n) */
     int urgent_aux;   /* 1: an urgent packet closes the batch and its D is sent at once in AUX frames */
 } quill_params_t;
 
 typedef void (*quill_emit_fn)(void* ctx, const uint8_t* frame, size_t len, int kind /* 0 init 1 data 2 aux */);
 
 /* size of D for a batch of nb packets */
-size_t quill_D_len(const quill_params_t* p, int nb);
-int    quill_m_eff(const quill_params_t* p, int nb);
-size_t quill_frag_len(const quill_params_t* p, int nb);
+size_t quill_D_len(int sig, int nb, int m);
+int    quill_m_eff(int m, int nb);
+size_t quill_frag_len(int sig, int nb, int m, int k);
 
 /* ------------------------------------------------------------------ device */
 typedef struct {
@@ -62,7 +64,8 @@ typedef struct {
     int i;                 /* next packet index in batch */
     uint8_t leaf[QUILL_MAX_N][QUILL_LEAF];
     /* pending authenticator of the previous batch, dispersed into fragments */
-    uint8_t* frag; size_t F; int fn; uint32_t fb; int fsent;
+    int cur_m, cur_k;      /* parameters for the batch that closes next */
+    uint8_t* frag; size_t fragcap; size_t F; int fn, fm, fk; uint32_t fb; int fsent;
     uint8_t* D; size_t Dcap;
     quill_emit_fn emit; void* ectx;
     uint8_t* buf; size_t bufcap;
@@ -76,6 +79,7 @@ typedef struct {
 int  quill_dev_init(quill_dev_t* d, const quill_params_t* p, sig_key_t* sk,
                   const uint8_t* gw_pk, uint32_t sid, quill_emit_fn emit, void* ectx);
 int  quill_dev_send(quill_dev_t* d, const uint8_t* payload, size_t len, int urgent);
+int  quill_dev_set_mk(quill_dev_t* d, int m, int k);   /* adapt m and k from the next batch on */
 int  quill_dev_close(quill_dev_t* d);      /* ends the session, flushes everything */
 void quill_dev_free(quill_dev_t* d);
 
@@ -83,7 +87,7 @@ void quill_dev_free(quill_dev_t* d);
 #define QUILL_RING 4
 typedef struct {
     uint32_t b; int used;
-    int nb;                               /* batch size once known (fn), else 0 */
+    int nb, m, k;                         /* batch size and code parameters once known */
     uint8_t have[QUILL_MAX_N];
     uint8_t leaf[QUILL_MAX_N][QUILL_LEAF];
     uint8_t kc[QUILL_MAX_N][32];
