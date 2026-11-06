@@ -1,0 +1,8 @@
+operation,emulated_cycles,emulated_runs,board_cycles,board_runs,difference_pct,emulated_stack,board_stack
+ML-DSA-44 sign (PQClean clean),7974745,20,7925955,1000,0.6,51884,51976
+ML-DSA-44 verify (PQClean clean),2439332,20,2063096,1000,18.2,44036,36308
+SPHINCS+-SHA2-128f sign (clean),404366610,2,368575228,10,9.7,2432,2468
+SPHINCS+-SHA2-128f verify (clean),24607442,5,21923628,10,12.2,10656,2664
+SPHINCS+-SHA2-128s sign (clean),8400484540,1,7657558168,10,9.7,2520,2556
+SPHINCS+-SHA2-128s verify (clean),8402602,5,7471794,10,12.5,9960,1968
+# board figures: pqm4 benchmarks.md, commit 6ff2be97 (23 Oct 2026), NUCLEO-L4R5ZI at 24 MHz without wait states

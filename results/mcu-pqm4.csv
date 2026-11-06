@@ -1,0 +1,4 @@
+function,payload_bytes,sig,n,m,k,reps,instructions,cycles,ms_at_64MHz,ms_at_120MHz,stack_bytes,heap_bytes,cycles_sd,cycles_min,cycles_max
+op_verify_mldsa44ref,0,6,32,8,24,20,2033547,2439332,38.1146,20.3278,44036,256,0,2439332,2439332
+op_verify_sphincs128f,0,3,32,8,24,5,21259552,24607442,384.4913,205.0620,10656,128,0,24607442,24607442
+op_verify_sphincs128s,0,2,32,8,24,5,7256126,8402602,131.2907,70.0217,9960,128,0,8402602,8402602

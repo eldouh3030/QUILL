@@ -1,0 +1,4 @@
+prep_verify 0 0 0 32 8 24
+op_verify_mldsa44ref 0 20 6 32 8 24
+op_verify_sphincs128f 0 5 3 32 8 24
+op_verify_sphincs128s 0 5 2 32 8 24

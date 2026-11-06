@@ -6,9 +6,11 @@ instructions and assigns cycles from the Cortex-M4 Technical Reference Manual (z
 Stack depth is measured by painting the stack before each call; heap is the peak in-use size of a
 free-list allocator (`fwlib.c`). Cycle counts are converted to time at 64 MHz (nRF52840-class SoC).
 
-External check: our ML-DSA-44 signing mean (12.4 M cycles, 300 runs) is close to wolfSSL's
-published STM32F4 figure for the same library (60.3 ms at 168 MHz = 10.1 M cycles), and the
-ML-KEM-512 encapsulation (inside the 4.26 M-cycle hybrid with X25519) is consistent with it too.
+External checks (`../results/pqm4-comparison.csv`): for the PQClean clean code, the pqm4
+benchmarks on a NUCLEO-L4R5ZI board at 24 MHz (no wait states) give cycle counts 0.6% (ML-DSA-44
+sign) to 18% (ML-DSA-44 verify) below ours, and signing stack depths within 2%. wolfSSL's published
+STM32F4 figure for its own ML-DSA-44 signing (60.3 ms at 168 MHz = 10.1 M cycles) is 22% below our
+12.4 M cycles. The emulator is therefore on the conservative side.
 
 ## Toolchain used
 
@@ -26,6 +28,7 @@ WOLFSSL_DIR=/path/to/wolfssl UNICORN_DIR=/path/to/unicorn ./build.sh
 ./run fw.bin syms.txt plan-components.txt ../results/mcu-components.csv
 ./run fw.bin syms.txt plan-extra.txt      ../results/mcu-extra.csv
 ./run fw.bin syms.txt plan-protocol.txt   ../results/mcu-protocol.csv
+./run fw.bin syms.txt plan-pqm4.txt       ../results/mcu-pqm4.csv
 ```
 
 Plan lines are `<function> <payload> <reps> <sig> <n> <m> <k>`; `reps = 0` runs a preparation

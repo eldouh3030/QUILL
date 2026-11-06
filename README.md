@@ -42,7 +42,7 @@ forward secrecy per batch.
 
 ```
 out\build\release\tests.exe
-out\build\release\hostbench.exe 300 2 > results-laptop\primitives.csv
+out\build\release\hostbench.exe 300 2 | Out-File -Encoding ascii results-laptop\primitives.csv
 ```
 
 ## Build and run (Linux)

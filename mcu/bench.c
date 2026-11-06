@@ -80,6 +80,8 @@ void op_verify_falcon512(void) { do_ver(SIG_FALCON512); }
 void op_verify_lms(void)       { do_ver(SIG_LMS); }
 void op_verify_ed25519(void)   { do_ver(SIG_ED25519); }
 void op_verify_sphincs128s(void) { do_ver(SIG_SPHINCS128S); }
+void op_verify_sphincs128f(void) { do_ver(SIG_SPHINCS128F); }
+void op_verify_mldsa44ref(void) { do_ver(SIG_MLDSA44_REF); }
 
 /* ------------------------------------------------------ protocol pieces */
 static uint8_t leaves[QUILL_MAX_N][QUILL_LEAF];
